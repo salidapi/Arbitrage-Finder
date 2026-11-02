@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="A private, local, on-demand pre-match arbitrage scanner.">
+  <title>Arbitrage Finder</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="/" aria-label="Arbitrage Finder home"><span class="brand-mark" aria-hidden="true">A<span>→</span></span><span>Arbitrage<span class="brand-light">Finder</span></span></a>
+      <span class="sidebar-label">WORKSPACE</span>
+      <nav class="navigation" aria-label="Main navigation">
+        <button type="button" class="nav-item active" data-tab="scanner" aria-current="page"><span aria-hidden="true">⌕</span> Scanner</button>
+        <button type="button" class="nav-item" data-tab="sources"><span aria-hidden="true">⇄</span> Data sources <span id="source-nav-count" class="nav-count">0</span></button>
+        <button type="button" class="nav-item" data-tab="history"><span aria-hidden="true">◷</span> Scan history</button>
+        <button type="button" class="nav-item" data-tab="guides"><span aria-hidden="true">▤</span> Guides &amp; code</button>
+      </nav>
+      <div class="sidebar-bottom"><div class="privacy-dot"></div><div><strong>Private by default</strong><p>Runs on your own computer.<br>No subscriptions required.</p></div></div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar"><div class="breadcrumb">Workspace <span>/</span> <strong id="page-crumb">Scanner</strong></div><div class="topbar-right"><span class="tag neutral">PRE-MATCH ONLY</span><span class="local-indicator"><i></i> Local workspace</span></div></header>
+      <div id="notification" class="notification" role="status" aria-live="polite" hidden></div>
+      <section id="panel-scanner" class="tab-panel" aria-labelledby="scanner-title">
+        <div class="page-heading"><div><div class="eyebrow">YOUR ODDS, IN ONE PLACE</div><h1 id="scanner-title">Find your next opportunity.</h1><p>Compare pre-match prices. Set your margin. Scan when you choose.</p></div><button class="button primary scan-trigger" id="scan-button" type="button"><span class="scan-symbol" aria-hidden="true">⌕</span><span class="scan-label">Scan for arbitrage</span></button></div>
+
+        <div id="mode-banner" class="notice mode-notice"><span class="notice-icon" aria-hidden="true">i</span><p id="mode-banner-text">Live mode uses only configured data sources. Start a scan to check their status.</p><button type="button" class="text-button" data-go-tab="sources">Manage sources →</button></div>
+        <div class="stat-grid">
+          <article class="stat-card"><div class="stat-label">OPPORTUNITIES <span aria-hidden="true">→</span></div><strong id="stat-opportunities">—</strong><span id="stat-opportunities-note" class="stat-note">No scan yet</span></article>
+          <article class="stat-card"><div class="stat-label">BEST RETURN <span aria-hidden="true">%</span></div><strong id="stat-return" class="accent">—</strong><span class="stat-note">After stake rounding</span></article>
+          <article class="stat-card"><div class="stat-label">QUOTES ANALYZED <span aria-hidden="true">≋</span></div><strong id="stat-quotes">—</strong><span id="stat-sources-note" class="stat-note">From enabled sources</span></article>
+          <article class="stat-card"><div class="stat-label">LAST SCAN <span aria-hidden="true">◷</span></div><strong id="stat-last-scan" class="stat-time">—</strong><span id="stat-scan-note" class="stat-note">Manual scans only</span></article>
+        </div>
+
+        <section class="card scan-settings" aria-labelledby="settings-title">
+          <div class="card-heading"><h2 id="settings-title">Scan preferences</h2><span class="subtle">Applied to your next scan</span></div>
+          <form id="settings-form">
+            <div class="field-grid">
+              <label>Minimum profit <span class="input-addon"><input id="minimum-profit" name="minimum_profit" type="number" min="0" max="100" step="0.1" value="1" required><span>%</span></span><small>Minimum return on total stake</small></label>
+              <label>Total stake <span class="input-addon"><input id="bankroll" name="bankroll" type="number" min="1" max="1000000" step="0.01" value="100" required><span id="stake-currency">EUR</span></span><small>Split across every outcome</small></label>
+              <label>Maximum quote age <span class="input-addon"><input id="max-age" name="max_age_seconds" type="number" min="5" max="86400" step="1" value="120" required><span>sec</span></span><small>Reject older observed prices</small></label>
+              <label>Data mode <select id="data-mode" name="mode"><option value="live">Live sources</option><option value="demo">Demo · sample data</option></select><small>Demo never uses real odds</small></label>
+            </div>
+            <details class="advanced-settings"><summary>Advanced matching &amp; filters</summary><div class="field-grid"><label>Currency<select id="currency"><option>EUR</option><option>USD</option><option>ALL</option><option>GBP</option></select><small>No currency conversion is applied</small></label><label>Maximum source time difference<span class="input-addon"><input id="source-skew" type="number" min="1" max="3600" value="60" required><span>sec</span></span><small>Maximum gap between selected quotes</small></label><label>Sport filter<input id="sports-filter" type="text" placeholder="All sports"><small>Match sport name; leave blank for all</small></label><label>League filter<input id="leagues-filter" type="text" placeholder="All leagues"><small>Match league name; leave blank for all</small></label></div><label class="timestamp-option"><input id="require-source-timestamps" type="checkbox" checked><span>Require source update timestamps (recommended)<small>Disabling this checks retrieval time only. An old bookmaker price may appear fresh.</small></span></label></details>
+            <div class="preferences-footer"><span class="subtle">No automatic refresh. No alerts. You control every scan.</span><button class="button secondary small" type="submit">Save preferences</button></div>
+          </form>
+        </section>
+
+        <section class="results-section" aria-labelledby="results-title"><div class="section-heading"><div><h2 id="results-title">Opportunities <span id="result-count" class="count-pill">0</span></h2><p id="results-subtitle">Only equivalent, complete outcome sets are compared.</p></div><span id="result-mode-label" class="tag neutral">NOT SCANNED</span></div><div id="scan-progress" class="scan-progress" hidden><span class="spinner"></span><div><strong>Checking your enabled sources…</strong><p>This may take a moment. Your scanner runs only on request.</p></div></div><div id="scan-warnings" hidden></div><div id="opportunities"><div class="empty-state"><div class="empty-icon" aria-hidden="true">⌕</div><h3>A clearer view of the odds.</h3><p>Configure a public data source, then start your first scan.<br>Use Demo to explore the dashboard with labeled sample data.</p><button class="button secondary" type="button" data-go-tab="sources">Configure sources <span aria-hidden="true">→</span></button></div></div></section>
+
+        <section class="card" aria-labelledby="health-title"><div class="card-heading"><h2 id="health-title">Source health</h2><span class="subtle">Coverage and availability vary by source</span></div><div id="source-health" class="health-grid"><p class="subtle">Loading source configuration…</p></div><details class="quote-preview"><summary>Extracted quote preview <span id="quote-preview-count" class="count-pill">0</span></summary><p id="quote-preview-note" class="subtle">No scan recorded yet. Run a scan to inspect up to 100 extracted quotes, including prices, timestamps, and settlement contracts.</p><pre id="quote-preview-json" hidden></pre></details></section>
+        <p class="disclaimer">An opportunity is a price calculation, not a confirmed bet. Recheck prices, market settlement rules, limits, and availability at each bookmaker before placing any stake.</p>
+      </section>
+
+      <section id="panel-sources" class="tab-panel" aria-labelledby="sources-title" hidden>
+        <div class="page-heading"><div><div class="eyebrow">CONNECT YOUR DATA</div><h1 id="sources-title">Data sources</h1><p>Free feeds where available. Configurable public scrapers where feasible.</p></div></div>
+        <div class="notice"><span class="notice-icon" aria-hidden="true">i</span><p>Bookmaker profiles are not proof of live coverage. Public scrapers need the correct regional URL and verified mappings. Login and challenge bypass are not supported.</p></div>
+        <section class="card" aria-labelledby="api-key-title"><div class="card-heading"><div><h2 id="api-key-title">The Odds API</h2><p class="subtle">Optional free-plan account. Coverage and monthly quotas depend on your provider plan.</p></div><span id="api-key-status" class="tag neutral">NO KEY</span></div><form id="api-key-form"><label class="key-field">API key<div class="key-input-row"><input id="api-key" type="password" autocomplete="off" placeholder="Enter your API key" spellcheck="false" aria-describedby="key-help"><button class="button secondary" type="submit">Save key</button><button class="button ghost" id="delete-key" type="button">Remove</button></div><small id="key-help">Stored by the local backend. The saved key is never returned to this page. Never paste bookmaker passwords or cookies.</small></label></form></section>
+        <section class="card" aria-labelledby="sports-catalog-title"><div class="card-heading"><div><h2 id="sports-catalog-title">Available API sports</h2><p class="subtle">Load the provider's current sport keys, then copy your choices into the API connector's sports list.</p></div><button id="load-sports" class="button secondary small" type="button" disabled>Load available sports</button></div><p class="subtle">Requires a saved API key. This is a manual catalog request; it does not fetch odds or confirm bookmaker coverage. Check the reported quota before scanning.</p><div id="sports-catalog" class="sports-catalog" aria-live="polite"></div></section>
+        <div id="source-configs" class="source-configs"></div>
+        <section class="card" aria-labelledby="import-title"><div class="card-heading"><div><h2 id="import-title">Import normalized quotes</h2><p class="subtle">For your own data exports and connector testing. Imported results are labeled separately.</p></div></div><form id="import-form"><label>Quote JSON<textarea id="import-json" rows="7" spellcheck="false" placeholder='{"quotes": [{"event_id": "...", "bookmaker": "...", "odds": "2.10", "...": "..."}]}'></textarea></label><div class="import-footer"><label class="file-input-label">Load a JSON file<input id="import-file" type="file" accept=".json,application/json"></label><button type="submit" class="button secondary">Analyze imported quotes</button></div></form></section>
+      </section>
+
+      <section id="panel-history" class="tab-panel" aria-labelledby="history-title" hidden><div class="page-heading"><div><div class="eyebrow">YOUR SCAN LOG</div><h1 id="history-title">Scan history</h1><p>Review previous scans and their source outcomes.</p></div><button id="refresh-history" class="button secondary" type="button">Refresh history</button></div><div id="history-list" class="card"><p class="subtle">Loading scan history…</p></div></section>
+      <section id="panel-guides" class="tab-panel" aria-labelledby="guides-title" hidden><div class="page-heading"><div><div class="eyebrow">LEARN &amp; EXTEND</div><h1 id="guides-title">Guides &amp; code</h1><p>English documentation for setup, daily use, and extending the scanner.</p></div></div><div id="documents-list" class="document-grid"><div class="card"><h2>Documentation</h2><p class="subtle">The setup guide, code guide, and individual scraper PDFs will appear here after generation.</p></div></div></section>
+      <footer class="app-footer"><span>Arbitrage Finder <span class="footer-separator">/</span> Your local research workspace</span><span>Manual scans · Pre-match odds · No auto-betting</span></footer>
+    </main>
+  </div>
+</body>
+</html>
