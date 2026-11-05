@@ -133,6 +133,72 @@ function setBusy(busy) {
   $("import-form").querySelector("button[type=submit]").disabled = busy;
 }
 
+function formatScanOutcome(result, configuredSources = state.sources) {
+  const quoteCount = Number(result.quote_count) || 0;
+  const sources = (Array.isArray(result.sources) ? result.sources : []).map((source) => ({
+    ...source,
+    name: source.name || configuredSources.find((configured) => configured.id === source.id)?.name || source.id || "Unknown source",
+    status: String(source.status || "unknown").toLowerCase(),
+  }));
+  const active = sources.filter((source) => source.status !== "disabled");
+  const fallback = {
+    unconfigured: "Complete and verify this source's configuration in Data sources.",
+    blocked: "Public access was blocked. Check the source's access response.",
+    error: "The source request or extraction failed. Review its configuration.",
+    cooldown: "Wait for the source's minimum request interval before scanning again.",
+    ok: "The source returned no usable quotes for this request.",
+    disabled: "Enable this source in Data sources to include it in a scan.",
+  };
+  const details = active.map((source) => `${source.name} — ${source.status.replaceAll("_", " ")}: ${source.message || fallback[source.status] || "No further source details were returned."}`);
+  const hasIssues = active.some((source) => source.status !== "ok");
+  if (quoteCount > 0) {
+    return {
+      message: `Scan finished. ${quoteCount} quotes analyzed; ${(result.opportunities || []).length} opportunities found.${hasIssues ? " Some sources need attention; see the scan details." : ""}`,
+      type: hasIssues ? "warning" : "success",
+      warnings: active.filter((source) => source.status !== "ok").map((source) => details[active.indexOf(source)]),
+      emptyTitle: "No matching opportunities in this scan.",
+      emptyMessage: "No complete, equivalent market met your profit and freshness requirements. Another scan may produce a different result.",
+    };
+  }
+  const noEnabled = result.mode === "live" && !active.length && !configuredSources.some((source) => source.enabled);
+  if (noEnabled) {
+    const message = "No live sources are enabled. Open Data sources, complete a source's configuration, and enable it before scanning.";
+    return { message, type: "warning", warnings: [message], emptyTitle: "No live sources are enabled.", emptyMessage: message };
+  }
+  const allUnconfigured = active.length > 0 && active.every((source) => source.status === "unconfigured");
+  const allCooldown = active.length > 0 && active.every((source) => source.status === "cooldown");
+  const accessFailed = active.some((source) => ["error", "blocked", "timeout", "failed"].includes(source.status));
+  const title = allUnconfigured ? "Enabled sources need configuration." : allCooldown ? "Sources are waiting for their next request." : "No usable quotes were returned.";
+  const emptyMessage = allUnconfigured
+    ? "Complete the configuration fields reported above, save each source, and scan again. A bookmaker profile alone does not extract odds."
+    : allCooldown
+    ? "Wait for the minimum request intervals shown above, then run a new scan."
+    : details.length
+    ? "The source results above explain why this scan produced no usable quotes. Check access, configuration, and quote mappings before scanning again."
+    : "No source diagnostics were returned. Check that the intended sources are enabled and configured before scanning again.";
+  const warnings = details.length ? details : [emptyMessage];
+  return { message: `${title} ${warnings.join(" ")}`, type: accessFailed ? "error" : "warning", warnings, emptyTitle: title, emptyMessage };
+}
+
+function mergeScanWarnings(result, outcome, configuredSources = state.sources) {
+  const normalize = (value) => String(value).replace(/\s+/g, " ").trim().toLowerCase();
+  const represented = new Set();
+  for (const source of Array.isArray(result.sources) ? result.sources : []) {
+    const status = String(source.status || "unknown").toLowerCase();
+    if (!source.message || status === "disabled" || (Number(result.quote_count) > 0 && status === "ok")) continue;
+    const configured = configuredSources.find((candidate) => candidate.id === source.id);
+    const names = new Set([source.name, configured?.name, source.id].filter(Boolean));
+    for (const name of names) {
+      represented.add(normalize(`${name} [${status}]: ${source.message}`));
+      represented.add(normalize(`${name} — ${status.replaceAll("_", " ")}: ${source.message}`));
+    }
+  }
+  // Remove only source diagnostics already represented by the UI's source lines.
+  // Global warnings and source warnings with extra information remain visible.
+  const serverWarnings = (Array.isArray(result.warnings) ? result.warnings : []).filter((warning) => typeof warning !== "string" || !represented.has(normalize(warning)));
+  return [...new Set([...serverWarnings, ...outcome.warnings])];
+}
+
 async function scan() {
   if (state.busy) return;
   try {
@@ -142,8 +208,8 @@ async function scan() {
     const result = await api("/api/scan", "POST", {});
     renderScan(result);
     await refreshSources(false);
-    const warning = !result.quote_count || (result.sources || []).some((s) => ["error", "blocked"].includes(s.status));
-    notify(result.quote_count ? `Scan finished. ${result.quote_count} quotes analyzed; ${(result.opportunities || []).length} opportunities found.` : "Scan finished without usable quotes. Check source health and configuration.", warning ? "warning" : "success");
+    const outcome = formatScanOutcome(result);
+    notify(outcome.message, outcome.type);
   } catch (error) {
     notify(error.message, "error");
     renderWarnings([`The latest scan failed: ${error.message}`, ...(state.lastScan ? ["Any opportunities still displayed belong to the previous scan. Recheck their timestamps."] : [])]);
@@ -154,6 +220,8 @@ async function scan() {
 
 function renderWarnings(warnings) {
   const target = $("scan-warnings");
+  // Keep actionable scan diagnostics next to the mode banner, above preferences.
+  $("mode-banner").after(target);
   target.replaceChildren();
   const usable = Array.isArray(warnings) ? warnings.filter(Boolean) : [];
   target.hidden = !usable.length;
@@ -169,7 +237,7 @@ function renderScan(result) {
   $("stat-opportunities").textContent = opportunities.length;
   $("result-count").textContent = opportunities.length;
   const isDemo = result.mode === "demo";
-  $("stat-opportunities-note").textContent = isDemo ? "Sample data · not live opportunities" : result.mode === "import" ? "From imported quotes" : "Meeting your scan preferences";
+  $("stat-opportunities-note").textContent = isDemo ? "Sample data · not live opportunities" : result.mode === "import" ? "From imported quotes" : Number(result.quote_count) > 0 ? "Meeting your scan preferences" : "No usable quotes received";
   $("stat-return").textContent = opportunities.length ? `${number(Math.max(...opportunities.map((o) => Number(o.roi_percent))))}%` : "—";
   $("stat-quotes").textContent = number(result.quote_count || 0, 0);
   const sources = result.sources || [];
@@ -180,7 +248,8 @@ function renderScan(result) {
   label.className = `tag ${isDemo || result.mode === "import" ? "warning" : "neutral"}`;
   label.textContent = isDemo ? "DEMO · SAMPLE ODDS" : result.mode === "import" ? "IMPORTED QUOTES" : "LIVE SOURCE RESULTS";
   renderModeBanner(result.mode);
-  const warnings = [...(result.warnings || [])];
+  const outcome = formatScanOutcome(result);
+  const warnings = mergeScanWarnings(result, outcome);
   if (result.rejected && Object.keys(result.rejected).length) {
     const rejected = Object.entries(result.rejected).filter(([, count]) => Number(count) > 0).map(([reason, count]) => `${reason.replaceAll("_", " ")}: ${count}`);
     if (rejected.length) warnings.push(`Excluded by validation: ${rejected.join(" · ")}.`);
@@ -190,11 +259,11 @@ function renderScan(result) {
   target.replaceChildren();
   if (!opportunities.length) {
     const hasQuotes = Number(result.quote_count) > 0;
-    const failed = !hasQuotes && sources.some((s) => ["error", "blocked", "unconfigured"].includes(s.status));
+    const failed = !hasQuotes && outcome.type === "error";
     const empty = el("div", `empty-state${failed ? " error-state" : ""}`);
     empty.append(el("div", "empty-icon", failed ? "!" : "⌕"));
-    empty.append(el("h3", "", hasQuotes ? "No matching opportunities in this scan." : "No usable quotes returned."));
-    empty.append(el("p", "", hasQuotes ? "No complete, equivalent market met your profit and freshness requirements. Another scan may produce a different result." : "Review the source status below. Configure at least two compatible bookmaker feeds, or use Demo to explore sample results."));
+    empty.append(el("h3", "", outcome.emptyTitle));
+    empty.append(el("p", "", outcome.emptyMessage));
     target.append(empty);
   } else opportunities.forEach((opportunity) => target.append(opportunityCard(opportunity, result.mode)));
   renderHealth(sources);

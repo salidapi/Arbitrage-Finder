@@ -1,2 +1,2 @@
-6d806176cad527429efb60cfa17d1d77df98ed432633473fbfb96eceec681a08  arbitrage-finder-windows.zip
-f92f5f45782418e02fe5e781bc5d21a73da16838ea4c4655cd9529d06d200249  arbitrage-finder-guides.zip
+1c72278b87205fdf053fc1da29ca6429391d124a07930b4605579f807d4b1633  arbitrage-finder-windows.zip
+2dba515401fc6ce3b0d6ceec03dfd4cf68a6818877c227ebdba3ffa5017c8424  arbitrage-finder-guides.zip

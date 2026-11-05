@@ -1,0 +1,19 @@
+{
+  "adapter": "1xbet_dashboard",
+  "mode": "browser",
+  "url": "https://al-1xbet.com/en",
+  "allowed_hosts": [
+    "al-1xbet.com",
+    "v3.traincdn.com"
+  ],
+  "wait_selector": ".dashboard-game:has(.dashboard-game-action-bar[islive='false'])",
+  "min_interval_seconds": 10,
+  "max_pages": 1,
+  "pages": [],
+  "rules_confirmed": false,
+  "constants": {
+    "period": "full_time",
+    "rules": "",
+    "currency": "EUR"
+  }
+}

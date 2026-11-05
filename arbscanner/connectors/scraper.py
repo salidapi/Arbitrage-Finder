@@ -8,6 +8,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from .base import PROFILES, SourceBlocked, SourceConfigurationError, SourceResult
+from .configuration import scraper_setup_issues
 from .network import MAX_BYTES, USER_AGENT, detect_challenge, fetch_public_page, robots_allowed, validate_public_url
 from .parsers import parse_html, parse_json
 
@@ -72,7 +73,8 @@ async def browser_html(url: str, config: dict, allowed_hosts: list[str]) -> tupl
             html = await page.content()
             if len(html.encode("utf-8")) > MAX_BYTES:
                 raise SourceBlocked("Rendered page exceeds the 5 MB safety limit")
-            if await page.locator('input[type="password"]').count():
+            passwords = page.locator('input[type="password"]')
+            if any([await passwords.nth(i).is_visible() for i in range(await passwords.count())]):
                 raise SourceBlocked("Page requires a login; anonymous scraper stopped")
             detect_challenge(html)
             if denied and not html:
@@ -88,8 +90,9 @@ async def fetch_scraper(source_id: str, config: dict, api_key: str | None = None
         return SourceResult(source_id=source_id, status="unconfigured", message="Unknown scraper profile")
     if not config.get("url"):
         return SourceResult(source_id=source_id, status="unconfigured", message="Set a public source URL and verified HTML/JSON field mapping first")
-    if config.get("rules_confirmed") is not True:
-        return SourceResult(source_id=source_id, status="unconfigured", message="Confirm market settlement rules and suspended-odds filtering before enabling this scraper")
+    issues = scraper_setup_issues(source_id, config)
+    if issues:
+        return SourceResult(source_id=source_id, status="unconfigured", message="Setup incomplete. " + " ".join(issues) + " No source request was made.", metadata={"setup_issues": issues, "request_made": False})
     allowed_hosts = config.get("allowed_hosts") or profile["domains"]
     if not allowed_hosts or not isinstance(allowed_hosts, list) or not all(isinstance(h, str) and h and "/" not in h and ":" not in h for h in allowed_hosts):
         return SourceResult(source_id=source_id, status="unconfigured", message="Specify allowed_hosts as public DNS hostnames")
@@ -110,7 +113,10 @@ async def fetch_scraper(source_id: str, config: dict, api_key: str | None = None
     try:
         for url in pages:
             final_url, body = await (browser_html(url, config, allowed_hosts) if mode == "browser" else fetch_public_page(url, allowed_hosts, config.get("min_interval_seconds", 10)))
-            if mode == "json":
+            if config.get("adapter") == "1xbet_dashboard":
+                from .onexbet import parse_onexbet_dashboard
+                parsed, invalid = parse_onexbet_dashboard(body, config, source_id, final_url)
+            elif mode == "json":
                 data = json.loads(body)
                 parsed, invalid = parse_json(data, config, source_id, final_url)
             else:
@@ -119,9 +125,12 @@ async def fetch_scraper(source_id: str, config: dict, api_key: str | None = None
             rejected += invalid
             fetched_pages += 1
         if not quotes:
-            return SourceResult(source_id=source_id, status="error", message="No valid odds extracted. Check selectors, public accessibility, suspension handling, ISO timestamps, and settlement rules.", metadata={"pages": fetched_pages, "rejected_rows": rejected, "live_verified": False})
+            message = ("No eligible pre-match football 1X2 prices matched their event metadata. The page may contain started events, unavailable prices, unsupported markets, or a changed layout."
+                       if config.get("adapter") == "1xbet_dashboard" else
+                       "No valid odds extracted. Check selectors, public accessibility, suspension handling, ISO timestamps, and settlement rules.")
+            return SourceResult(source_id=source_id, status="error", message=message, metadata={"pages": fetched_pages, "rejected_rows": rejected, "live_verified": False, "adapter": config.get("adapter")})
         return SourceResult(source_id=source_id, status="ok", message=f"Extracted {len(quotes)} public pre-match quotes; verify regional coverage and freshness before use", quotes=quotes,
-                            metadata={"pages": fetched_pages, "rejected_rows": rejected, "source_timestamp_available": any(q.source_updated_at for q in quotes), "mapping_user_configured": True})
+                            metadata={"pages": fetched_pages, "rejected_rows": rejected, "source_timestamp_available": any(q.source_updated_at for q in quotes), "mapping_user_configured": not bool(config.get("adapter")), "adapter": config.get("adapter")})
     except SourceConfigurationError as exc:
         return SourceResult(source_id=source_id, status="unconfigured", message=str(exc))
     except SourceBlocked as exc:

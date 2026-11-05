@@ -4,7 +4,7 @@
 
 This guide explains the implementation delivered in the repository, from a click in the browser to normalized quotes, matching, stake calculations, and saved scan results. It is intended for a reader who can follow basic Python and JavaScript but has not previously built an odds scanner.
 
-Read Setup and Operations first if you want to run the program without studying its internals. Read the five separate scraper guides when configuring bookmaker pages. The scraper engine is implemented; site-specific live extraction mappings for the five requested bookmakers remain unverified until real public responses can be inspected and tested.
+Read Setup and Operations first if you want to run the program without studying its internals. Read the five separate scraper guides when configuring bookmaker pages. The scraper engine is implemented. Release 0.1.1 adds a source-specific 1XBet football-dashboard adapter checked against an offline page snapshot; current live access, settlement interpretation, and the other bookmaker mappings still require the evidence described in the source ledger.
 
 The project is a private, single-user application. It has no bookmaker account login, bet execution, scheduled polling, subscription system, user accounts, email service, or alert system. Those omissions follow the selected workflow: local, zero-hosting-cost, manual pre-match scans.
 
@@ -47,14 +47,17 @@ SQLite keeps setup small and portable. It stores settings, source configurations
 - `arbscanner/demo.py`: clearly synthetic, future-dated sample quotes.
 - `arbscanner/connectors/__init__.py`: connector dispatch.
 - `arbscanner/connectors/base.py`: source results, profile metadata, and source error types.
+- `arbscanner/connectors/configuration.py`: setup preflight that reports missing fields before public requests.
 - `arbscanner/connectors/network.py`: bounded public HTTPS reads, robots handling, destination checks, and challenge detection.
 - `arbscanner/connectors/parsers.py`: declarative HTML and JSON field extraction and explicit transforms.
 - `arbscanner/connectors/scraper.py`: profile-aware HTTP or anonymous-browser collection.
+- `arbscanner/connectors/onexbet.py`: evidence-backed 1XBet dashboard DOM/metadata joins for ordinary pre-match football 1X2.
 - `arbscanner/connectors/odds_api.py`: optional, quota-bounded The Odds API requests and normalization.
 - `static/index.html`, `static/app.js`, `static/style.css`: dashboard structure, interactions, and appearance.
 - `tests/`: controlled checks of the implementation.
 - `tools/build_docs.py`: local Markdown-to-PDF builder.
 - `docs/`: editable manuals, source evidence, and generated PDFs.
+- `examples/1xbet-dashboard.json`: incomplete-by-design adapter recipe requiring explicit settlement verification before use.
 
 ## 3. Startup and application construction
 
@@ -140,9 +143,17 @@ The budget is not an account ledger. It does not know your individual bookmaker 
 
 Profiles provide IDs, names, source kind, allowed domains, supported modes, and setup notes. The configured bookmaker domains are `bet365.com`, `stake.com`, `al-1xbet.com`, `marathonbet.com`, and `bet105.ag`; the user's Marathonbet and 1XBet pages use `/en`. These paths are part of a URL, not allowed-host entries.
 
-### 6.1 Why there are no guessed bookmaker selectors
+### 6.1 Setup preflight before collection
 
-An HTML class name or private-looking endpoint found in an old example is not evidence of the current regional site. The generic scraper is executable code, but each real site's URL, selectors, field paths, status handling, and settlement interpretation require actual validation. Until then, the source reports unconfigured or blocked. The evidence ledger records that limitation.
+`scraper_setup_issues(source_id, config)` checks required configuration before a scraper makes a source request. For a generic mapping it checks the canonical required fields across `constants` and `mapping`, verifies that a quote selector exists for HTML/browser extraction, and requires explicit rule confirmation. It reports field names and guidance without echoing configuration values or credentials.
+
+For `adapter: 1xbet_dashboard`, the source-specific code supplies participants, start, market, outcome, and prices; preflight does not require duplicate generic CSS mappings. It instead requires the correct source ID, an HTML-capable mode, nonempty verified rules, and `rules_confirmed: true`. An unsupported adapter name or the 1XBet adapter placed on a different bookmaker is a setup problem.
+
+An incomplete setup returns `unconfigured`, a detailed message, `setup_issues`, and `request_made: false`. It does not contact the source first and collapse missing fields into a generic zero-quote response. This distinguishes configuration work from a network or parsing failure.
+
+### 6.2 Why other example selectors are not verified feeds
+
+An HTML class name or private-looking endpoint found in an old example is not evidence of the current regional site. The generic scraper is executable code, but each real site's URL, selectors, field paths, status handling, and settlement interpretation require actual validation. The dedicated 1XBet adapter is an explicit source-specific implementation; it must not be selected for Bet365 or assumed to cover every market. The evidence ledger separates offline verification from current live access.
 
 ## 7. Public network reads
 
@@ -162,7 +173,7 @@ HTTP 401, 403, 429, and 451 become blocked-source results. Recognized challenge 
 
 Browser mode is optional. It checks the URL and robots access, starts Chromium headlessly, creates a fresh context without user cookies, blocks service workers, and routes requests through destination checks. Images, media, and fonts can be skipped because they are not needed to read odds. Non-GET requests are rejected, so a site that needs GraphQL POST or an authenticated interaction may not work in this mode.
 
-The browser mode keeps certificate verification enabled. It uses the inherited HTTPS proxy where configured. A page can wait for an explicit CSS selector before its rendered HTML is parsed. A password field or recognized challenge stops the attempt. The browser is closed in a `finally` block even when parsing fails.
+The browser mode keeps certificate verification enabled. It uses the inherited HTTPS proxy where configured. A page can wait for an explicit CSS selector before its rendered HTML is parsed. A visible password field or recognized challenge stops the attempt; a hidden sign-in widget alone does not establish that the public prices require login. The browser is closed in a `finally` block even when parsing fails.
 
 Browser rendering is more expensive and more fragile than a simple public JSON response. It is not a stronger form of permission and does not turn an inaccessible site into an available source.
 
@@ -191,6 +202,20 @@ These selectors describe a controlled example structure. They are not claimed to
 Constants supply verified values shared by the page, such as one league, market, period, rules, or currency. Avoid broad constants on a page mixing several markets or sports. A constant of `h2h_3way` is correct only if every selected row belongs to that contract.
 
 `inactive_selector` can reject a quote row containing a suspension marker. It is the source operator's responsibility to identify real suspended/closed markup; an odds number left in a disabled button is not necessarily an offered price.
+
+### 8.1 The dedicated 1XBet dashboard adapter
+
+`parse_onexbet_dashboard()` is a source-specific parser selected by `adapter: 1xbet_dashboard`. The scraper fetches HTML normally or through the anonymous browser and dispatches that body to this parser instead of the generic field mapper. The parser supports ordinary association-football full-time 1X2 on the confirmed profile host.
+
+The `_Event` record holds permanent identity, ordered participants, actual competition, full dated UTC start, and an optional canonical route. `_metadata()` obtains these records from SportsEvent JSON-LD or known dashboard schedule arrays inside `window.__V3_HOST_APP__` / `window.__BETTING_APP__` wrappers. Nested strings are decoded using a strict JSON decoder; source JavaScript is not executed. Schedule fields with seconds and milliseconds must agree, and conflicting representations block a fixture ID.
+
+For each `.dashboard-game` row, the parser requires an explicit `islive: false` action bar, one supported pre-match football route, exact ordered participant names matching the metadata, one unambiguous W1/X/W2 group, and a future authoritative start. It rejects special groups, subgames, live/over/dummy entries, inconsistent routes, missing metadata, and ambiguous identity. It reads only offered decimal-price cells after checking lock, empty, disabled, and aria-disabled markers.
+
+The output market is `h2h_3way`, the output sport is `soccer`, and W1/X/W2 map to home/draw/away. A supplied league constant filters the actual competition rather than replacing it. The caller must already have obtained explicit confirmation of the rule label; the adapter does not infer a settlement guarantee from button labels.
+
+The parsed metadata establishes fixture start, not odds freshness. `source_updated_at` remains null, while `observed_at` records the read. Strict source-age settings therefore reject these quotes until a real update-time route is implemented or the user explicitly accepts retrieval-only uncertainty. A historic snapshot is parsed using its historic observation time for a structure test; current-time parsing correctly rejects fixtures already started.
+
+The supplied adapter example is intentionally unconfirmed. New profile defaults may select it, but existing saved source JSON is preserved by startup and is not automatically migrated. Users with the older partial CSS recipe need to replace that source JSON with the release's complete example and verify the rules. The adapter belongs only to 1XBet; no Bet365 adapter is supplied by this change.
 
 ## 9. JSON extraction and transforms
 
@@ -295,6 +320,8 @@ The scan route uses an `asyncio.Lock` so the same process does not run overlappi
 Demo mode obtains dynamic synthetic quotes from `demo_quotes()` and labels the result clearly. Import mode uses the submitted validated quotes and labels them imported. Live mode reads only enabled sources. With no enabled sources, it returns an explicit warning rather than silently substituting demo prices.
 
 Live collection uses a concurrency semaphore of two and a per-source attempt timeout. A cooldown prevents repeated manual clicks from making requests too close together. Failed sources contribute status messages and zero current quotes. The scanner then runs the engine, creates an ID and timestamps, saves the result, and returns it.
+
+When live collection obtains zero quotes, orchestration adds named warnings containing each source's actual status and message. The frontend promotes these diagnostics near the top of the result view and distinguishes incomplete configuration, disabled sources, cooldown, blocked access, and extraction failures. It still permits the valid case where quotes were obtained but no arbitrage passes the checks. A zero-quote scan should no longer require guessing its cause from an opportunity count alone.
 
 The response includes opportunities, rejection counts, collected quote count, source summaries, scan mode, warnings, and completion time. It also includes up to 100 canonical `quote_samples`, even when no opportunity passes. The dashboard's extracted quote preview lets you inspect those fields while validating a source mapping. Sorting of opportunities is by rounded ROI descending.
 

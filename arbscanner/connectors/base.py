@@ -33,6 +33,12 @@ def default_config(profile: dict) -> dict:
     if profile["kind"] == "api":
         return {"sports": [], "bookmakers": [], "markets": ["h2h"], "regions": ["eu"],
                 "max_requests": 2, "currency": "EUR", "rules_confirmed": False, "rules_by_sport": {}}
+    if profile["id"] == "1xbet":
+        return {"adapter": "1xbet_dashboard", "mode": "browser", "url": DEFAULT_URLS["1xbet"],
+                "allowed_hosts": ["al-1xbet.com", "v3.traincdn.com"],
+                "wait_selector": ".dashboard-game:has(.dashboard-game-action-bar[islive='false'])",
+                "min_interval_seconds": 10, "max_pages": 1, "pages": [], "rules_confirmed": False,
+                "constants": {"period": "full_time", "rules": "", "currency": "EUR"}}
     return {"mode": "html", "url": DEFAULT_URLS[profile["id"]], "allowed_hosts": list(profile["domains"]),
             "min_interval_seconds": 10, "max_pages": 1, "pages": [], "rules_confirmed": False,
             "event_selector": "", "quote_selector": "", "mapping": {},

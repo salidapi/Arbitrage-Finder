@@ -1,6 +1,6 @@
 # Data Source Evidence and Release Limits
 
-Evidence date: 2 November 2026. This record describes what was actually established during development. It is not a claim that any bookmaker is currently accessible from every Albanian connection or that a provider's free plan has specific permanent terms.
+Evidence updated: 5 November 2026 for release 0.1.1. This record distinguishes original development observations, offline inspection of a supplied 3 November page snapshot, and the current live-fetch attempt. It is not a claim that any bookmaker is accessible from every Albanian connection or that a provider's free plan has specific permanent terms.
 
 ## Confirmed requirements
 
@@ -19,6 +19,10 @@ The managed development environment has a restricted, enforced outbound policy. 
 
 This is evidence of a development-environment access restriction. It is not evidence that the bookmakers themselves returned the same denial, that their robots files prohibit these paths, that they provide no free API, or that they cannot be accessed from the user's own computer.
 
+On 5 November, a normal `fetch_public_page` attempt for `https://al-1xbet.com/en` failed public-host DNS validation with `SourceBlocked: Source hostname could not be resolved`. No target HTML was retrieved in that attempt. This is a cloud-machine resolution observation, not a denial returned by 1XBet and not a test of the user's Windows connection. It does not verify current live adapter coverage.
+
+Separately, the reported zero-quote symptom could be reproduced without a network operation: a partial generic configuration lacked required canonical fields and retained `rules_confirmed: false`. The 0.1.1 preflight now reports these exact setup issues and explicitly marks when no source request was made. That configuration failure and the later DNS failure are independent observations.
+
 ## Bookmaker evidence
 
 ### Bet365
@@ -31,7 +35,11 @@ Requested site: https://stake.com. Profile ID: `stake`. Implemented modes: confi
 
 ### 1XBet
 
-Requested site: https://al-1xbet.com/en. Profile ID: `1xbet`. The profile uses the user-confirmed regional hostname rather than assuming that another mirror has the same interface. Configurable HTML, JSON, and browser modes are implemented. No guessed LineFeed endpoint, numeric market-code translation, or region-specific public feed is claimed to work.
+Requested site: https://al-1xbet.com/en. Profile ID: `1xbet`. Release 0.1.1 adds `adapter: 1xbet_dashboard` for the inspected English public dashboard, alongside generic HTML/JSON/browser modes. It joins offered ordinary football W1/X/W2 DOM prices to exact permanent fixture identity and full dates from matching SportsEvent JSON-LD or safely decoded known schedule JSON. It does not execute the embedded application scripts or invent a date.
+
+Offline analysis of the user-supplied 3 November snapshot produced 27 prices across nine ordinary football fixtures at the relevant historic observation time. Those same fixtures are rejected as already started at a later observation time. This verifies the represented snapshot's parsing and identity/date checks, not present live access, current price acceptance, or every sport and market. The private original PDF, full HTML, and raw reports are not release artifacts; only implementation logic and sanitized tests are published.
+
+The inspected metadata contains fixture dates but no authoritative odds-update timestamp. The adapter therefore leaves `source_updated_at` unknown. The scanner's default strict source-timestamp requirement excludes these prices as `unknown_source_age`. Retrieval-only use requires an explicit user choice and carries a warning. Settlement rules also require independent confirmation; the shipped recipe leaves its rule label empty and `rules_confirmed` false. No guessed LineFeed endpoint, hidden date constant, or free complete regional feed is asserted to work.
 
 ### Marathonbet
 
@@ -51,7 +59,7 @@ Reference for the user's own current plan and API documentation: https://the-odd
 
 The implementation is tested using synthetic quote sets, HTML pages, JSON payloads, mock network behavior, temporary databases, local HTTP integration checks, and browser interactions with the local dashboard. These checks establish behavior of the implemented software under those conditions.
 
-They do not establish current bookmaker availability, permission to scrape, source-specific selectors, real betting opportunity frequency, bookmaker bet acceptance, or five-site free live coverage. Demo quotes remain explicitly fictional and imports remain explicitly supplied data.
+They do not establish current bookmaker availability, permission to scrape, live consistency of a snapshot-derived source layout, real betting opportunity frequency, bookmaker bet acceptance, or five-site free live coverage. The 1XBet adapter has offline snapshot evidence; the other site-specific mappings remain independent work. Demo quotes remain explicitly fictional and imports remain explicitly supplied data.
 
 ## Conditions for upgrading a source to verified
 

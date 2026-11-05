@@ -1,6 +1,6 @@
 [project]
 name = "arbitrage-finder"
-version = "0.1.0"
+version = "0.1.1"
 description = "A private, manual pre-match arbitrage workbench with transparent data provenance"
 requires-python = ">=3.12"
 dependencies = [

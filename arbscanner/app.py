@@ -213,6 +213,10 @@ def create_app(data_dir: Path | None = None):
                 for summary, data in await asyncio.gather(*(collect(source) for source in sources)):
                     results.append(summary)
                     quotes.extend(data)
+                if not quotes:
+                    names = {source["id"]: source["name"] for source in sources}
+                    for result in results:
+                        warnings.append(f"{names.get(result['id'], result['id'])} [{result['status']}]: {result['message']}")
             output = scan_quotes(quotes, settings)
             value = {"id": str(uuid4()), "mode": mode, "started_at": started.isoformat(),
                      "completed_at": utcnow().isoformat(), "quote_count": len(quotes), "sources": results,

@@ -1,12 +1,14 @@
 """Bounded HTTPS reads. Never follows unchecked redirects or reaches local hosts."""
 import asyncio
 import ipaddress
+import re
 import socket
 import time
 from urllib.parse import urljoin, urlsplit
 from urllib.robotparser import RobotFileParser
 
 import httpx
+from bs4 import BeautifulSoup
 
 from .base import SourceBlocked, SourceConfigurationError
 
@@ -92,8 +94,18 @@ async def robots_allowed(client: httpx.AsyncClient, url: str, allowed_hosts: lis
 
 
 def detect_challenge(body: str) -> None:
-    sample = body[:250_000].lower()
-    if any(token in sample for token in ("cf-chl-", "verify you are human", "checking your browser", "captcha", "access denied")):
+    # A normal public page can load a CAPTCHA library for a hidden login dialog.
+    # Its script filename alone does not mean the requested odds are challenged.
+    soup = BeautifulSoup(body, "html.parser")
+    for node in soup.find_all(["script", "style", "template", "svg"]):
+        node.decompose()
+    for node in list(soup.select('[hidden], [aria-hidden="true"]')):
+        if node.parent is not None:
+            node.decompose()
+    text = soup.get_text(" ", strip=True).casefold()
+    if re.search(r"(?:window\.)?_cf_chl_opt\s*=", body) or soup.select_one('#challenge-form, #cf-challenge-running, .cf-challenge') or any(
+        phrase in text for phrase in ("verify you are human", "checking your browser", "access denied", "complete the captcha", "solve the captcha")
+    ):
         raise SourceBlocked("Public page returned an access challenge; no bypass attempted")
 
 

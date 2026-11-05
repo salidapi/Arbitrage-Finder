@@ -8,7 +8,7 @@ The software runs on your computer. Python, the application code, the browser da
 
 ### 1.1 Read the support status first
 
-The five requested bookmaker profiles are Bet365 at `bet365.com`, Stake at `stake.com`, 1XBet at `al-1xbet.com/en`, Marathonbet at `marathonbet.com/en`, and Bet105 at `bet105.ag`. These are the sites confirmed by the intended user. Their public-page scraper engine is implemented, but their extraction mappings must be configured and checked against real pages. No profile should be treated as a verified live bookmaker integration simply because its name appears in Settings.
+The five requested bookmaker profiles are Bet365 at `bet365.com`, Stake at `stake.com`, 1XBet at `al-1xbet.com/en`, Marathonbet at `marathonbet.com/en`, and Bet105 at `bet105.ag`. These are the sites confirmed by the intended user. Their public-page scraper engine is implemented. Release 0.1.1 adds a dedicated 1XBet football-dashboard adapter tested against a supplied page snapshot; the other bookmaker profiles still require their own complete mappings. No profile should be treated as a verified current live integration simply because its name appears in Settings. Consult the source evidence record for the latest access and verification results.
 
 The supplied scraper manuals explain how to configure each profile without a login. When a website requires login, denies automated access, presents a challenge, or does not expose usable public prices, that connector remains unavailable. A profile with no extraction mapping is deliberately unconfigured, rather than reporting invented odds.
 
@@ -131,6 +131,8 @@ An unconfigured source needs a URL, a mapping, or another required setting. A bl
 
 Do not treat an empty response as proof that no betting events exist. A page layout change can also produce no matching rows. Compare the configured row selectors with the current public page, and run a small test before re-enabling a source for broader scans.
 
+When a scan obtains zero quotes, the dashboard now displays named source diagnostics near the top of the scan view as well as in Source health. Look for messages such as `1XBet [unconfigured]` or `Bet365 [blocked]`, followed by the actual reason. A missing setup field, a robots denial, and a cooldown are different conditions; follow the named reason rather than changing unrelated filters.
+
 ## 6. Configure bookmaker scrapers
 
 Each requested bookmaker has a profile in Settings. Keep a source disabled until its configuration is meaningful. There are three supported extraction modes:
@@ -153,9 +155,29 @@ Choose the simplest mode that retrieves complete, current, public odds. JSON can
 8. Compare the result against the visible page, including a known non-arbitrage market.
 9. Enable broader coverage only after the normalized data is correct.
 
-The five companion scraper manuals provide the field-level configuration and bookmaker-specific checks. Their example selectors are for a controlled example page, not assertions about a bookmaker's current HTML. Replace them using the real public page you verified.
+The five companion scraper manuals provide the field-level configuration and bookmaker-specific checks. Generic example selectors describe a controlled page, rather than asserting a bookmaker's current structure. For the supplied 1XBet dashboard layout, use its dedicated adapter recipe below instead of attempting to turn the illustrative CSS mapping into a complete scraper.
 
-### 6.2 Regional domains and allowlists
+### 6.2 Use the 1XBet dashboard adapter
+
+Open `examples/1xbet-dashboard.json` in the supplied release and copy its complete JSON into the 1XBet source editor. This selects `adapter: 1xbet_dashboard` and browser mode for the public English dashboard. It permits the profile host and the explicit public resource host `v3.traincdn.com`; adding those names in source settings does not override a restricted machine's outbound policy.
+
+Existing saved source settings are preserved when you update the software. Installing 0.1.1 does not silently replace an older partial 1XBet JSON configuration in your local database. Copy the example into that source's editor and save it explicitly.
+
+The example deliberately leaves `constants.rules` empty and `rules_confirmed` false. Inspect the actual full-time 1X2 market's rules. If you verify that it settles on regulation-time match result, set `constants.rules` to `regulation` and then set `rules_confirmed` to true. Do not use the confirmation flag to conceal unknown market semantics.
+
+The adapter reads offered W1/X/W2 prices from the dashboard and obtains dated fixture identity from matching SportsEvent JSON-LD or known dashboard schedule JSON. It does not need a manually invented date or generic `starts_at`, `home`, `away`, or `outcome` mapping. Missing or inconsistent fixture metadata causes rejection. It currently supports ordinary football full-time 1X2 only; it is not an adapter for every 1XBet sport or market.
+
+Fixture start time is not an odds-update time. The adapter leaves `source_updated_at` unknown because the inspected data does not establish that fact. With the default Require source update timestamps option checked, its quotes are excluded from arbitrage calculations as `unknown_source_age`. You may explicitly uncheck that option if you accept retrieval-only freshness checks; the dashboard then warns that old prices may appear recently observed. Read the separate 1XBet guide before enabling it.
+
+### 6.3 Why a partial CSS configuration returns no quotes
+
+An event selector and price selector do not establish a complete betting contract. A generic scraper also needs dated `starts_at` with a timezone, ordered participant names, sport, league, canonical market, canonical outcome, odds, and verified rules. A visible clock such as 20:00 does not establish a date or UTC offset.
+
+The new preflight checker reports missing required field names before contacting the source. If the message includes `No source request was made`, correcting the source mapping is the next step; refreshing repeatedly or increasing the freshness limit cannot supply those missing fields. Changing `rules_confirmed` to true alone does not add the missing identity, market, or timestamp information.
+
+Bet365 remains a separate mapping task. Selecting or configuring the 1XBet adapter does not add a Bet365 adapter. Keep Bet365 disabled until its own verified public route provides every required field.
+
+### 6.4 Regional domains and allowlists
 
 The profiles use the user-confirmed domains listed at the start of this guide. If you later use a different regional domain, change the allowed host list to the exact public hostname required by the profile and set the URL accordingly. Only use a domain you have verified. Redirects and browser requests must satisfy the connector's restrictions; adding a domain in the dashboard does not grant outbound network access in a restricted hosting environment.
 
@@ -265,7 +287,7 @@ Keep the server terminal open and check for a traceback or port conflict. Open t
 
 ### 12.4 A source is unconfigured
 
-Open that source's settings and verify the URL, mode, mapping, constants, required rule confirmation, and enabled state. A provisional default domain is not a completed scraper. Use its separate setup PDF.
+Read the source's named error near the top of the scan results or under Source health. Preflight lists missing required fields and confirms when no source request was made. Open that source's settings and verify the URL, mode, complete mapping or supported adapter, constants, required rule confirmation, and enabled state. For 1XBet's supported dashboard use `examples/1xbet-dashboard.json`; for Bet365, the 1XBet adapter does not supply its missing mapping. Use the relevant separate setup PDF.
 
 ### 12.5 A source is blocked
 
@@ -274,6 +296,10 @@ Inspect the status message. A robots denial, access challenge, login requirement
 ### 12.6 A source returns zero quotes
 
 Check whether the exact target page has future events and the requested market. Re-inspect event and quote selectors, field attributes, JSON paths, time formats, decimal odds, and suspended-state indicators. Confirm the mapping extracts the event's complete outcome set. A missing field should be corrected in the mapping rather than replaced with a guessed value.
+
+For the 1XBet adapter, inspect its metadata error rather than adding a hardcoded date. The adapter requires a matching permanent event identity, ordered participant names, full dated start, and valid pre-match status. An old saved page can contain valid structure but only historic events, which correctly produce no current pre-match quotes. Offline parsing of a past snapshot is a structure test, not a source of current bets.
+
+If quotes are collected but no opportunities pass, open Extracted quote preview and rejected counts. `unknown_source_age` means the source did not establish an odds-update timestamp. Keeping the strict default is valid. Disabling it is an explicit acceptance of retrieval-only uncertainty, and still does not create another bookmaker or a profitable price combination.
 
 ### 12.7 The results contain implausible profit
 
